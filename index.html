@@ -73,6 +73,31 @@
     .price { color: var(--green); font-weight: 850; font-size: 15px; white-space: nowrap; }
     .add-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 11px; color: white; background: var(--green); transition: background .2s, transform .2s; }
     .add-btn:hover { background: var(--green-dark); transform: scale(1.07); }
+    .cart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
+    .cart-head h3 { font-size: 18px; margin: 0; letter-spacing: -.5px; }
+    .cart-head .cart-icon { display: grid; place-items: center; width: 40px; height: 40px; background: var(--mint); color: var(--green); border-radius: 13px; }
+    .cart-count { display: inline-grid; place-items: center; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 20px; color: white; background: var(--green); font-size: 11px; margin-left: 5px; vertical-align: 2px; }
+    .cart-items { padding: 4px 0 2px; }
+    .empty-cart { padding: 29px 10px 27px; text-align: center; color: var(--muted); }
+    .empty-cart .empty-illustration { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 20px; display: grid; place-items: center; color: #8ba58d; background: #eff4ec; font-size: 25px; }
+    .empty-cart strong { display: block; color: var(--ink); font-size: 13px; margin-bottom: 5px; }
+    .empty-cart span { font-size: 11px; }
+    .cart-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 13px 0; border-bottom: 1px solid #f0eee8; }
+    .cart-row:last-child { border-bottom: 0; }
+    .cart-item-name { font-weight: 750; font-size: 12px; margin: 0 0 5px; }
+    .cart-item-price { color: var(--muted); font-size: 11px; }
+    .cart-item-subtotal { font-size: 12px; font-weight: 800; text-align: right; margin-bottom: 7px; }
+    .cart-controls { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+    .qty-btn, .remove-btn { border: 1px solid var(--line); background: white; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; font-size: 10px; color: var(--ink); transition: .15s; }
+    .qty-btn:hover { background: var(--mint); border-color: #c4d6c5; color: var(--green); }
+    .qty-value { min-width: 13px; text-align: center; font-size: 11px; font-weight: 800; }
+    .remove-btn { border-color: #f3d8d3; color: var(--red); margin-left: 3px; }
+    .remove-btn:hover { background: var(--red-bg); }
+    .summary { border-top: 1px dashed #dedbd1; padding-top: 16px; margin-top: 6px; }
+    .summary-line { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+    .summary-line strong { color: var(--ink); font-weight: 750; }
+    .summary-line.grand { color: var(--ink); font-size: 15px; font-weight: 800; margin: 15px 0 0; }
+    .summary-line.grand strong { color: var(--green); font-size: 22px; letter-spacing: -.6px; }
     .footer-note { text-align: center; color: #96988d; font-size: 10px; margin-top: 28px; }
   </style>
 </head>
@@ -105,9 +130,16 @@
       </section>
 
       <aside class="side-column" aria-label="Order and payment">
-        <section class="panel">
-          <h3>Your Order</h3>
-          <p style="color: var(--muted); font-size: 12px;">Cart is currently empty.</p>
+        <section class="panel" aria-labelledby="cartHeading">
+          <div class="cart-head">
+            <div><h3 id="cartHeading">Your Order <span class="cart-count" id="cartCount">0</span></h3><p style="margin:5px 0 0;color:var(--muted);font-size:11px">A good choice, every time.</p></div>
+            <div class="cart-icon"><i class="fa-solid fa-basket-shopping"></i></div>
+          </div>
+          <div class="cart-items" id="cartItems" aria-live="polite"></div>
+          <div class="summary">
+            <div class="summary-line"><span>Items in order</span><strong id="itemCount">0 items</strong></div>
+            <div class="summary-line grand"><span>Total due</span><strong id="grandTotal">₱0.00</strong></div>
+          </div>
         </section>
       </aside>
     </main>
@@ -127,8 +159,13 @@
       { id: 6, name: "Club Sandwich", price: 75, description: "A hearty bite between classes.", icon: "fa-burger", art: "art-sandwich" }
     ];
 
+    const cart = new Map();
     const peso = amount => "₱" + Number(amount).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const menuGrid = document.getElementById("menuGrid");
+    const cartItems = document.getElementById("cartItems");
+    const cartCount = document.getElementById("cartCount");
+    const itemCount = document.getElementById("itemCount");
+    const grandTotal = document.getElementById("grandTotal");
 
     function renderMenu() {
       menuGrid.innerHTML = products.map(product => `
@@ -146,7 +183,83 @@
       `).join("");
     }
 
+    function getTotal() {
+      return [...cart.values()].reduce((sum, item) => sum + item.price * item.quantity, 0);
+    }
+
+    function getQuantity() {
+      return [...cart.values()].reduce((sum, item) => sum + item.quantity, 0);
+    }
+
+    function renderCart() {
+      const entries = [...cart.values()];
+      cartItems.innerHTML = entries.length ? entries.map(item => `
+        <div class="cart-row">
+          <div>
+            <p class="cart-item-name">${item.name}</p>
+            <span class="cart-item-price">${peso(item.price)} each</span>
+          </div>
+          <div>
+            <div class="cart-item-subtotal">${peso(item.price * item.quantity)}</div>
+            <div class="cart-controls">
+              <button class="qty-btn" type="button" data-minus="${item.id}" aria-label="Decrease ${item.name} quantity"><i class="fa-solid fa-minus"></i></button>
+              <span class="qty-value" aria-label="Quantity">${item.quantity}</span>
+              <button class="qty-btn" type="button" data-plus="${item.id}" aria-label="Increase ${item.name} quantity"><i class="fa-solid fa-plus"></i></button>
+              <button class="remove-btn" type="button" data-remove="${item.id}" aria-label="Remove ${item.name}" title="Remove item"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+        </div>
+      `).join("") : `
+        <div class="empty-cart">
+          <div class="empty-illustration"><i class="fa-solid fa-basket-shopping"></i></div>
+          <strong>Your basket is taking a break</strong>
+          <span>Add something tasty from the menu.</span>
+        </div>
+      `;
+
+      const quantity = getQuantity();
+      cartCount.textContent = quantity;
+      itemCount.textContent = `${quantity} ${quantity === 1 ? "item" : "items"}`;
+      grandTotal.textContent = peso(getTotal());
+    }
+
+    function addToCart(id) {
+      const product = products.find(item => item.id === id);
+      if (!product) return;
+      const existing = cart.get(id);
+      if (existing) existing.quantity += 1;
+      else cart.set(id, { ...product, quantity: 1 });
+      renderCart();
+    }
+
+    function changeQuantity(id, delta) {
+      const item = cart.get(id);
+      if (!item) return;
+      item.quantity += delta;
+      if (item.quantity <= 0) cart.delete(id);
+      renderCart();
+    }
+
+    function removeItem(id) {
+      cart.delete(id);
+      renderCart();
+    }
+
+    menuGrid.addEventListener("click", event => {
+      const button = event.target.closest("[data-add]");
+      if (button) addToCart(Number(button.dataset.add));
+    });
+
+    cartItems.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      if (button.dataset.plus) changeQuantity(Number(button.dataset.plus), 1);
+      else if (button.dataset.minus) changeQuantity(Number(button.dataset.minus), -1);
+      else if (button.dataset.remove) removeItem(Number(button.dataset.remove));
+    });
+
     renderMenu();
+    renderCart();
   </script>
 </body>
 </html>
